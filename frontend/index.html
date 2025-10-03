@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BudgetPal - Your Smart Expense Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color-rgba: 241, 245, 249;
+            --text-color: #1e293b;
+            --primary-color: #6366f1;
+            --secondary-color: #818cf8;
+            --header-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --sidebar-bg: #ffffff;
+            --font-sans: 'Inter', sans-serif;
+        }
+        .theme-sunset { --bg-color-rgba: 255, 247, 237; --text-color: #7c2d12; --primary-color: #f97316; --secondary-color: #fb923c; --header-bg: linear-gradient(135deg, #fb923c, #f97316); }
+        .theme-ocean { --bg-color-rgba: 239, 246, 255; --text-color: #1e3a8a; --primary-color: #3b82f6; --secondary-color: #60a5fa; --header-bg: linear-gradient(135deg, #60a5fa, #3b82f6); }
+        .theme-forest { --bg-color-rgba: 240, 253, 244; --text-color: #14532d; --primary-color: #22c55e; --secondary-color: #4ade80; --header-bg: linear-gradient(135deg, #4ade80, #22c55e); }
+
+        body { 
+            font-family: var(--font-sans); 
+            background-image: url('https://images.unsplash.com/photo-1554147090-e1221a04a025?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'); 
+            background-size: cover; 
+            background-position: center; 
+            background-attachment: fixed; 
+            color: var(--text-color); 
+            transition: color 0.5s ease; 
+        }
+        .main-content-area { 
+            background-color: rgba(var(--bg-color-rgba), 0.85); 
+            backdrop-filter: blur(12px); 
+            transition: background-color 0.5s ease; 
+        }
+        .sidebar { 
+            background-color: var(--sidebar-bg); 
+            transition: background-color 0.5s ease; 
+        }
+        .header { 
+            background: var(--header-bg); 
+            transition: background 0.5s ease; 
+        }
+        .view { display: none; }
+        .view.active { 
+            display: block; 
+            animation: fadeIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+        }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(20px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        .nav-item { 
+            position: relative; 
+            transition: all 0.3s ease; 
+            cursor: pointer;
+        }
+        .nav-item:after { 
+            content: ''; 
+            position: absolute; 
+            right: 0; 
+            top: 0; 
+            height: 100%; 
+            width: 4px; 
+            background-color: var(--secondary-color); 
+            transform: scaleY(0); 
+            transition: transform 0.3s ease; 
+        }
+        .nav-item:hover { 
+            background-color: rgba(var(--bg-color-rgba), 0.5); 
+            transform: translateX(4px); 
+        }
+        .nav-item.active { 
+            background-color: var(--primary-color); 
+            color: white; 
+        }
+        .nav-item.active:after { transform: scaleY(1); }
+        .button-primary { 
+            background-color: var(--primary-color); 
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            cursor: pointer;
+        }
+        .button-primary:hover { 
+            background-color: var(--secondary-color); 
+            transform: translateY(-3px) scale(1.03); 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15); 
+        }
+        .modal-backdrop { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease, opacity 0.3s ease; }
+        .card-interactive { 
+            background-color: var(--card-bg); 
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+        }
+        .card-interactive:hover { 
+            transform: translateY(-8px); 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); 
+        }
+        .toast { 
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out; 
+            transform: translateY(100%); 
+            opacity: 0; 
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .logged-in { display: none; }
+        .logged-out { display: block; }
+        body.authenticated .logged-in { display: block; }
+        body.authenticated .logged-out { display: none; }
+        .btn-icon { 
+            padding: 0.5rem; 
+            background: transparent; 
+            border: none; 
+            cursor: pointer; 
+            border-radius: 0.25rem;
+            transition: background-color 0.2s ease;
+        }
+        .btn-icon:hover { 
+            background-color: rgba(0, 0, 0, 0.1); 
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="flex h-screen">
+        <aside class="sidebar w-20 md:w-64 bg-white shadow-lg flex flex-col z-10">
+            <div class="flex items-center justify-center md:justify-start md:pl-4 h-20 border-b">
+                <div class="flex-shrink-0">
+                    <div class="relative w-10 h-10">
+                        <div class="absolute bottom-0 left-0 w-8 h-8 bg-indigo-200 rounded-full"></div>
+                        <div class="absolute top-0 right-0 w-8 h-8 bg-indigo-500 rounded-full border-4 border-white"></div>
+                    </div>
+                </div>
+                <span class="hidden md:inline text-2xl font-bold ml-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-transparent bg-clip-text">BudgetPal</span>
+            </div>
+
+            <div class="p-4">
+                <button id="add-expense-btn" class="w-full button-primary text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <span class="hidden md:inline">Add Expense</span>
+                </button>
+            </div>
+
+            <nav class="flex-grow border-t">
+                <a href="#dashboard" class="nav-item flex items-center py-4 px-6 text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span class="hidden md:inline ml-4 font-medium">Dashboard</span>
+                </a>
+                <a href="#budgets" class="nav-item flex items-center py-4 px-6 text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <span class="hidden md:inline ml-4 font-medium">Budgets</span>
+                </a>
+                <a href="#groups" class="nav-item flex items-center py-4 px-6 text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                    <span class="hidden md:inline ml-4 font-medium">Groups</span>
+                </a>
+                <a href="#reports" class="nav-item flex items-center py-4 px-6 text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <span class="hidden md:inline ml-4 font-medium">Reports</span>
+                </a>
+            </nav>
+        </aside>
+
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="header flex justify-between items-center p-6 border-b text-white shadow-lg">
+                <div>
+                    <h1 id="header-title" class="text-2xl font-semibold">Dashboard</h1>
+                    <p id="header-greeting" class="text-sm opacity-80"></p>
+                </div>
+                <div class="relative">
+                    <button id="profile-btn" class="p-2 rounded-full bg-white bg-opacity-25 text-white hover:bg-opacity-50 transition-colors duration-300">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
+                    </button>
+                    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 text-gray-800">
+                        <div class="px-4 py-2 text-sm text-gray-700">
+                            <p>Welcome, <span id="user-name">Guest</span></p>
+                        </div>
+                        <div class="border-t border-gray-100"></div>
+                        <a href="#" id="login-btn" class="logged-out block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Login with Google</a>
+                        <a href="#" id="logout-btn" class="logged-in block px-4 py-2 text-sm text-red-600 hover:bg-gray-100">Logout</a>
+                        <div class="border-t border-gray-100"></div>
+                        <a href="#" id="dropdown-theme-btn" class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                           </svg>
+                           <span>Switch Theme</span>
+                        </a>
+                    </div>
+                </div>
+            </header>
+
+            <main class="main-content-area flex-1 overflow-x-hidden overflow-y-auto p-6">
+                <div id="dashboard-view" class="view active">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4 card-interactive">
+                            <img src="https://img.icons8.com/plasticine/100/stack-of-money.png" alt="stack of money" class="w-12 h-12"/>
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500">Personal Spent (Month)</h3>
+                                <p id="total-spent" class="text-2xl font-bold">₹0.00</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md flex items-center gap-4 card-interactive">
+                            <img src="https://img.icons8.com/plasticine/100/goal.png" alt="goal" class="w-12 h-12"/>
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500">Main Budget</h3>
+                                <p id="main-budget-status" class="text-2xl font-bold">₹0 / ₹0</p>
+                            </div>
+                        </div>
+                    </div>
+                
+                    <div class="bg-white p-6 rounded-lg shadow-md mb-6 card-interactive">
+                        <h3 class="text-sm font-medium text-gray-500">Quote of the day</h3>
+                        <p id="quote" class="text-lg italic mt-2"></p>
+                    </div>
+                
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow-md card-interactive">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-semibold">Spending Trend (Last 6 Months)</h3>
+                                <button id="export-csv-btn" class="text-sm button-primary text-white font-bold py-2 px-3 rounded-lg">Export Data</button>
+                            </div>
+                            <div class="chart-container relative h-80">
+                                <canvas id="spending-trend-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md card-interactive">
+                            <h3 class="font-semibold mb-4">Recent Transactions</h3>
+                            <div id="recent-transactions" class="space-y-4 overflow-y-auto max-h-80"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="budgets-view" class="view">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div class="bg-white p-8 rounded-lg shadow-lg card-interactive">
+                            <h2 class="text-2xl font-bold mb-6 text-center">Set Your Budgets</h2>
+                            <form id="budget-form">
+                                <div class="mb-4">
+                                    <label for="budget-category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                    <select id="budget-category" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></select>
+                                </div>
+                                <div class="mb-6">
+                                    <label for="budget-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                                    <input type="number" id="budget-amount" placeholder="e.g., 25000" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                                </div>
+                                <button type="submit" class="w-full button-primary text-white font-bold py-3 px-4 rounded-lg">Set Budget</button>
+                            </form>
+                        </div>
+                        <div class="bg-white p-8 rounded-lg shadow-lg card-interactive">
+                            <h2 class="text-2xl font-bold mb-6 text-center">Add Custom Category</h2>
+                            <form id="custom-category-form">
+                                <div class="mb-4">
+                                    <label for="custom-category-name" class="block text-sm font-medium text-gray-700 mb-1">Category Name</label>
+                                    <input type="text" id="custom-category-name" placeholder="e.g., Investments" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                                </div>
+                                <div class="mb-6">
+                                    <label for="custom-category-icon" class="block text-sm font-medium text-gray-700 mb-1">Icon (Emoji)</label>
+                                    <input type="text" id="custom-category-icon" placeholder="e.g., 📈" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                                </div>
+                                <button type="submit" class="w-full button-primary text-white font-bold py-3 px-4 rounded-lg">Add Category</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="mb-8 p-8 bg-white rounded-lg shadow-lg">
+                        <h2 class="text-2xl font-bold mb-6 text-center">Manage Income Sources</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <h3 class="font-semibold text-lg mb-4">Add New Income</h3>
+                                <form id="income-form">
+                                    <div class="mb-4">
+                                        <label for="income-source" class="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                                        <input type="text" id="income-source" placeholder="e.g., Monthly Salary" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="income-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                                        <input type="number" id="income-amount" placeholder="e.g., 50000" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                                    </div>
+                                    <div class="mb-6">
+                                        <label for="income-recurrence" class="block text-sm font-medium text-gray-700 mb-1">Recurrence</label>
+                                        <select id="income-recurrence" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                            <option value="monthly">Monthly</option>
+                                            <option value="weekly">Weekly</option>
+                                            <option value="one-time">One-Time</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="w-full button-primary text-white font-bold py-3 px-4 rounded-lg">Add Income</button>
+                                </form>
+                            </div>
+                            <div>
+                                <h3 class="font-semibold text-lg mb-4">Your Income Sources</h3>
+                                <div id="incomes-list" class="space-y-3">
+                                    <p class="text-gray-500">No income sources added yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 class="text-2xl font-bold mb-6 text-center">Your Budgets</h2>
+                    <div id="budgets-list" class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </div>
+
+                <div id="groups-view" class="view">
+                    <div class="bg-white p-6 rounded-lg shadow-lg max-w-5xl mx-auto card-interactive">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                             <div class="flex items-center gap-4">
+                                <label for="group-selector" class="text-lg font-semibold">Select Group:</label>
+                                <select id="group-selector" class="p-2 border border-gray-300 rounded-md"></select>
+                            </div>
+                            <div class="flex gap-2 mt-4 md:mt-0">
+                                <button id="delete-group-btn" class="hidden bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors duration-300">Delete Selected Group</button>
+                                <button id="create-group-btn" class="mt-4 md:mt-0 bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors duration-300">Create New Group</button>
+                            </div>
+                        </div>
+                        <div id="group-content-area"></div>
+                    </div>
+                </div>
+
+                <div id="reports-view" class="view">
+                    <div class="bg-white p-6 rounded-lg shadow-lg card-interactive">
+                        <h2 class="text-2xl font-bold mb-6 text-center">Income Analysis & Financial Reports</h2>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <div class="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-lg text-white">
+                                <h3 class="text-lg font-semibold mb-2">Total Monthly Income</h3>
+                                <p id="total-monthly-income" class="text-3xl font-bold">₹0</p>
+                                <p id="income-source-count" class="text-sm opacity-90 mt-1">0 sources</p>
+                            </div>
+                            
+                            <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+                                <h3 class="text-lg font-semibold mb-2">Recurring Income</h3>
+                                <p id="recurring-monthly-income" class="text-3xl font-bold">₹0</p>
+                                <p id="recurring-percentage" class="text-sm opacity-90 mt-1">0% of total</p>
+                            </div>
+                            
+                            <div class="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-lg text-white">
+                                <h3 class="text-lg font-semibold mb-2">One-Time Income</h3>
+                                <p id="onetime-monthly-income" class="text-3xl font-bold">₹0</p>
+                                <p id="onetime-count" class="text-sm opacity-90 mt-1">0 sources</p>
+                            </div>
+                            
+                            <div class="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-lg text-white">
+                                <h3 class="text-lg font-semibold mb-2">Total Expenses</h3>
+                                <p id="total-expenses-month" class="text-3xl font-bold">₹0</p>
+                                <p id="expense-vs-income" class="text-sm opacity-90 mt-1">0% of income</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div class="bg-gray-50 p-6 rounded-lg">
+                                <h3 class="text-xl font-bold mb-4">Income Sources Breakdown</h3>
+                                <div id="income-breakdown" class="space-y-3"></div>
+                                <div class="mt-4 p-4 bg-white rounded border">
+                                    <h4 class="font-semibold text-gray-700">Income Projections</h4>
+                                    <p class="text-sm text-gray-600 mt-1">
+                                        6 Month: <span id="six-month-income" class="font-bold text-green-600">₹0</span>
+                                    </p>
+                                    <p class="text-sm text-gray-600">
+                                        Annual: <span id="annual-income" class="font-bold text-green-600">₹0</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-50 p-6 rounded-lg">
+                                <h3 class="text-xl font-bold mb-4">Monthly Expense Analysis</h3>
+                                <div id="expense-category-breakdown" class="space-y-3"></div>
+                                <div class="mt-4 p-4 bg-white rounded border">
+                                    <h4 class="font-semibold text-gray-700">Spending Insights</h4>
+                                    <p class="text-sm text-gray-600 mt-1" id="highest-expense-category">
+                                        Top Category: N/A
+                                    </p>
+                                    <p class="text-sm text-gray-600" id="savings-potential">
+                                        Potential Savings: ₹0
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 bg-gray-50 p-6 rounded-lg">
+                            <h3 class="text-xl font-bold mb-4">Income vs Expenses Projection (12 Months)</h3>
+                            <div class="chart-container relative h-80">
+                                <canvas id="income-expense-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 bg-blue-50 border-l-4 border-blue-400 p-6">
+                            <h3 class="text-lg font-bold text-blue-800 mb-3">Financial Health Analysis</h3>
+                            <div id="financial-health" class="text-blue-700"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <footer class="text-center py-4">
+                    <p class="text-sm text-gray-500">&copy; 2024 BudgetPal. All Rights Reserved. | Contact: <a href="mailto:suthishtsp@gmail.com" class="text-indigo-500 hover:underline">suthishtsp@gmail.com</a></p>
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    <div id="expense-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 hidden modal-backdrop">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md modal-content transform scale-95">
+            <form id="expense-form" class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Add a New Expense</h2>
+                <input type="hidden" id="expense-id">
+                <div class="mb-4">
+                    <label for="expense-description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <input type="text" id="expense-description" placeholder="e.g., Coffee with friends" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                    <input type="number" id="expense-amount" step="0.01" placeholder="e.g., 550.00" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-4">
+                    <label for="expense-category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select id="expense-category" class="w-full px-3 py-2 border border-gray-300 rounded-md"></select>
+                </div>
+                <div class="mb-6">
+                    <label for="expense-group-select" class="block text-sm font-medium text-gray-700 mb-1">Add to Group (Optional)</label>
+                     <select id="expense-group-select" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option value="">Personal Expense</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancel-expense-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="button-primary text-white font-bold py-2 px-4 rounded-lg">Save Expense</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="edit-budget-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 hidden modal-backdrop">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md modal-content transform scale-95">
+            <form id="edit-budget-form" class="p-8">
+                <h2 class="text-2xl font-bold mb-2">Edit Budget</h2>
+                <p class="text-gray-600 mb-6" id="edit-budget-category-title"></p>
+                <div class="mb-4">
+                    <label for="edit-budget-amount" class="block text-sm font-medium text-gray-700 mb-1">New Amount (₹)</label>
+                    <input type="number" id="edit-budget-amount" step="0.01" placeholder="e.g., 27500" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <input type="hidden" id="edit-budget-category-hidden">
+                <div class="flex justify-end space-x-4 mt-8">
+                    <button type="button" id="cancel-edit-budget-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="button-primary text-white font-bold py-2 px-4 rounded-lg">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="create-group-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4 hidden modal-backdrop">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md modal-content transform scale-95">
+            <form id="create-group-form" class="p-8">
+                <h2 class="text-2xl font-bold mb-6">Create a New Group</h2>
+                <div class="mb-4">
+                    <label for="group-name" class="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
+                    <input type="text" id="group-name" placeholder="e.g., Goa Trip, Apartment Mates" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="mb-6">
+                    <label for="group-members" class="block text-sm font-medium text-gray-700 mb-1">Members (comma separated)</label>
+                    <input type="text" id="group-members" placeholder="e.g., Alex, Maria, Chen" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancel-create-group-btn" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">Cancel</button>
+                    <button type="submit" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Create Group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast fixed bottom-5 right-5 bg-green-500 text-white py-3 px-6 rounded-lg shadow-lg">
+        <p id="toast-message"></p>
+    </div>
+    
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyDwEfpM5cLiv95U6GICX0aJj2MjV8mWqfs",
+    authDomain: "budgetpal-470505.firebaseapp.com",
+    projectId: "budgetpal-470505",
+    storageBucket: "budgetpal-470505.firebasestorage.app",
+    messagingSenderId: "513174377104",
+    appId: "1:513174377104:web:7844bfb5646bfb470fbe15",
+    measurementId: "G-ZE9GR76DBB"
+};
+
+const API_BASE_URL = 'http://127.0.0.1:5000';
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+class IncomeReportsLogic {
+    calculateMonthlyEquivalent(amount, recurrence) {
+        switch(recurrence?.toLowerCase()) {
+            case 'weekly': return amount * 4.33;
+            case 'monthly': return amount;
+            case 'yearly': return amount / 12;
+            case 'one-time': return amount;
+            default: return amount;
+        }
+    }
+
+    getIncomeAnalysis(incomes) {
+        const totalIncomes = incomes.length;
+        let totalMonthlyIncome = 0;
+        let recurringMonthlyIncome = 0;
+        let oneTimeMonthlyIncome = 0;
+        
+        const frequencyBreakdown = {};
+        const sourceAnalysis = [];
+
+        incomes.forEach(income => {
+            const monthlyAmount = this.calculateMonthlyEquivalent(income.amount, income.recurrence);
+            totalMonthlyIncome += monthlyAmount;
+            
+            if (income.recurrence === 'one-time') {
+                oneTimeMonthlyIncome += monthlyAmount;
+            } else {
+                recurringMonthlyIncome += monthlyAmount;
+            }
+
+            if (!frequencyBreakdown[income.recurrence]) {
+                frequencyBreakdown[income.recurrence] = {
+                    count: 0,
+                    totalAmount: 0,
+                    monthlyEquivalent: 0,
+                    sources: []
+                };
+            }
+            
+            frequencyBreakdown[income.recurrence].count++;
+            frequencyBreakdown[income.recurrence].totalAmount += income.amount;
+            frequencyBreakdown[income.recurrence].monthlyEquivalent += monthlyAmount;
+            frequencyBreakdown[income.recurrence].sources.push({
+                source: income.source,
+                originalAmount: income.amount,
+                monthlyEquivalent: monthlyAmount
+            });
+
+            sourceAnalysis.push({
+                source: income.source,
+                recurrence: income.recurrence,
+                amount: income.amount,
+                monthlyEquivalent: monthlyAmount,
+                percentage: 0
+            });
+        });
+
+        sourceAnalysis.forEach(source => {
+            source.percentage = totalMonthlyIncome > 0 ? 
+                (source.monthlyEquivalent / totalMonthlyIncome) * 100 : 0;
+        });
+
+        const recurringPercentage = totalMonthlyIncome > 0 ? 
+            (recurringMonthlyIncome / totalMonthlyIncome) * 100 : 0;
+
+        return {
+            totalSources: totalIncomes,
+            totalMonthlyIncome,
+            recurringMonthlyIncome,
+            oneTimeMonthlyIncome,
+            recurringPercentage,
+            frequencyBreakdown,
+            sourceAnalysis,
+            sixMonthProjection: recurringMonthlyIncome * 6,
+            annualProjection: recurringMonthlyIncome * 12
+        };
+    }
+
+    getExpenseAnalysis(expenses) {
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        const currentMonthExpenses = expenses.filter(expense => {
+            const expenseDate = new Date(expense.date);
+            return expenseDate.getMonth() === currentMonth && 
+                   expenseDate.getFullYear() === currentYear &&
+                   !expense.groupId;
+        });
+
+        const totalMonthlyExpenses = currentMonthExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+        
+        const categoryBreakdown = {};
+        currentMonthExpenses.forEach(expense => {
+            if (!categoryBreakdown[expense.category]) {
+                categoryBreakdown[expense.category] = {
+                    count: 0,
+                    total: 0,
+                    items: []
+                };
+            }
+            categoryBreakdown[expense.category].count++;
+            categoryBreakdown[expense.category].total += expense.amount;
+            categoryBreakdown[expense.category].items.push({
+                description: expense.description,
+                amount: expense.amount
+            });
+        });
+
+        const highestCategory = Object.entries(categoryBreakdown)
+            .sort(([,a], [,b]) => b.total - a.total)[0];
+
+        return {
+            totalMonthlyExpenses,
+            categoryBreakdown,
+            expenseCount: currentMonthExpenses.length,
+            highestCategory: highestCategory ? {
+                name: highestCategory[0],
+                amount: highestCategory[1].total,
+                count: highestCategory[1].count
+            } : null
+        };
+    }
+
+    generateFinancialHealth(incomeAnalysis, expenseAnalysis) {
+        const recommendations = [];
+        const savingsAmount = incomeAnalysis.totalMonthlyIncome - expenseAnalysis.totalMonthlyExpenses;
+
+        if (savingsAmount > 0) {
+            const savingsRate = (savingsAmount / incomeAnalysis.totalMonthlyIncome) * 100;
+            if (savingsRate >= 20) {
+                recommendations.push({
+                    type: 'excellent',
+                    message: `Outstanding! You're saving ${savingsRate.toFixed(1)}% (₹${savingsAmount.toFixed(2)}) of your income monthly.`
+                });
+            } else if (savingsRate >= 10) {
+                recommendations.push({
+                    type: 'good',
+                    message: `Good job! You're saving ${savingsRate.toFixed(1)}% of your income. Consider increasing to 20% if possible.`
+                });
+            } else {
+                recommendations.push({
+                    type: 'suggestion',
+                    message: `You're saving ₹${savingsAmount.toFixed(2)} monthly. Try to increase your savings rate to at least 10% of income.`
+                });
+            }
+        } else if (savingsAmount < 0) {
+            recommendations.push({
+                type: 'critical',
+                message: `Warning: You're spending ₹${Math.abs(savingsAmount).toFixed(2)} more than you earn monthly. Review your expenses immediately.`
+            });
+        }
+
+        if (incomeAnalysis.totalSources === 1) {
+            recommendations.push({
+                type: 'warning',
+                message: 'Consider diversifying your income sources to reduce financial risk.'
+            });
+        } else if (incomeAnalysis.totalSources >= 3) {
+            recommendations.push({
+                type: 'positive',
+                message: `Great! You have ${incomeAnalysis.totalSources} income sources, which provides good financial security.`
+            });
+        }
+
+        if (incomeAnalysis.recurringPercentage < 50) {
+            recommendations.push({
+                type: 'suggestion',
+                message: `Only ${incomeAnalysis.recurringPercentage.toFixed(1)}% of your income is recurring. Consider building more predictable income streams.`
+            });
+        } else {
+            recommendations.push({
+                type: 'positive',
+                message: `${incomeAnalysis.recurringPercentage.toFixed(1)}% of your income is recurring, providing good financial predictability.`
+            });
+        }
+
+        if (expenseAnalysis.highestCategory) {
+            const categoryPercentage = (expenseAnalysis.highestCategory.amount / incomeAnalysis.totalMonthlyIncome) * 100;
+            if (categoryPercentage > 30) {
+                recommendations.push({
+                    type: 'warning',
+                    message: `Your ${expenseAnalysis.highestCategory.name} expenses (₹${expenseAnalysis.highestCategory.amount.toFixed(2)}) represent ${categoryPercentage.toFixed(1)}% of your income. Consider reducing this category.`
+                });
+            }
+        }
+
+        return recommendations;
+    }
+
+    createIncomeExpenseChart() {
+        const ctx = document.getElementById('income-expense-chart');
+        if (!ctx) return null;
+
+        return new Chart(ctx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Projected Monthly Income',
+                    data: [],
+                    backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                    borderColor: 'rgb(34, 197, 94)',
+                    borderWidth: 2
+                }, {
+                    label: 'Average Monthly Expenses',
+                    data: [],
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                    borderColor: 'rgb(239, 68, 68)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '₹' + value.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ₹' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+class BudgetPalApp {
+    constructor() {
+        this.state = {
+            expenses: [],
+            budgets: {},
+            groups: [],
+            incomes: [],
+            categories: [
+                { name: 'Food', icon: '🍔' },
+                { name: 'Transport', icon: '🚗' },
+                { name: 'Entertainment', icon: '🎬' },
+                { name: 'Utilities', icon: '💡' },
+                { name: 'Shopping', icon: '🛍️' },
+                { name: 'Other', icon: '❓' }
+            ],
+            user: { name: 'Guest', email: null, uid: null },
+            currentView: 'dashboard',
+            selectedGroupId: null,
+            currentTheme: 0,
+            themes: ['', 'theme-sunset', 'theme-ocean', 'theme-forest'],
+            quotes: [
+                "A budget is telling your money where to go instead of wondering where it went.",
+                "Don't save what is left after spending, but spend what is left after saving.",
+                "The secret of getting ahead is getting started.",
+                "Beware of little expenses. A small leak will sink a great ship.",
+                "Financial peace isn't the acquisition of stuff. It's learning to live on less than you make."
+            ]
+        };
+        
+        this.spendingTrendChart = null;
+        this.incomeExpenseChart = null;
+        this.initializeElements();
+        this.bindEvents();
+        this.initializeAuth();
+        this.initIncomeReportsLogic();
+        this.init();
+    }
+
+    initIncomeReportsLogic() {
+        this.incomeReportsLogic = new IncomeReportsLogic();
+    }
+
+    initializeElements() {
+        this.elements = {
+            views: document.querySelectorAll('.view'),
+            navItems: document.querySelectorAll('.nav-item'),
+            headerTitle: document.getElementById('header-title'),
+            headerGreeting: document.getElementById('header-greeting'),
+            addExpenseBtn: document.getElementById('add-expense-btn'),
+            expenseModal: document.getElementById('expense-modal'),
+            cancelExpenseBtn: document.getElementById('cancel-expense-btn'),
+            expenseForm: document.getElementById('expense-form'),
+            budgetForm: document.getElementById('budget-form'),
+            incomeForm: document.getElementById('income-form'),
+            incomesList: document.getElementById('incomes-list'),
+            budgetsList: document.getElementById('budgets-list'),
+            editBudgetModal: document.getElementById('edit-budget-modal'),
+            editBudgetForm: document.getElementById('edit-budget-form'),
+            cancelEditBudgetBtn: document.getElementById('cancel-edit-budget-btn'),
+            createGroupBtn: document.getElementById('create-group-btn'),
+            deleteGroupBtn: document.getElementById('delete-group-btn'),
+            createGroupModal: document.getElementById('create-group-modal'),
+            createGroupForm: document.getElementById('create-group-form'),
+            cancelCreateGroupBtn: document.getElementById('cancel-create-group-btn'),
+            groupSelector: document.getElementById('group-selector'),
+            quoteEl: document.getElementById('quote'),
+            toast: document.getElementById('toast'),
+            toastMessage: document.getElementById('toast-message'),
+            customCategoryForm: document.getElementById('custom-category-form'),
+            recentTransactions: document.getElementById('recent-transactions'),
+            exportCsvBtn: document.getElementById('export-csv-btn'),
+            profileBtn: document.getElementById('profile-btn'),
+            profileDropdown: document.getElementById('profile-dropdown'),
+            loginBtn: document.getElementById('login-btn'),
+            logoutBtn: document.getElementById('logout-btn'),
+            userNameEl: document.getElementById('user-name'),
+            dropdownThemeBtn: document.getElementById('dropdown-theme-btn')
+        };
+    }
+
+    bindEvents() {
+        this.elements.navItems.forEach(item => {
+            item.addEventListener('click', (e) => this.handleNavigation(e));
+        });
+
+        this.elements.loginBtn.addEventListener('click', (e) => this.handleLogin(e));
+        this.elements.logoutBtn.addEventListener('click', (e) => this.handleLogout(e));
+        this.elements.profileBtn.addEventListener('click', (e) => this.toggleProfileDropdown(e));
+        this.elements.dropdownThemeBtn.addEventListener('click', (e) => this.switchTheme(e));
+
+        this.elements.addExpenseBtn.addEventListener('click', () => this.openExpenseModal());
+        this.elements.cancelExpenseBtn.addEventListener('click', () => this.closeModal(this.elements.expenseModal));
+        this.elements.expenseModal.addEventListener('click', (e) => this.handleModalBackdropClick(e, this.elements.expenseModal));
+
+        this.elements.cancelEditBudgetBtn.addEventListener('click', () => this.closeModal(this.elements.editBudgetModal));
+        this.elements.editBudgetModal.addEventListener('click', (e) => this.handleModalBackdropClick(e, this.elements.editBudgetModal));
+
+        this.elements.createGroupBtn.addEventListener('click', () => this.openModal(this.elements.createGroupModal));
+        this.elements.cancelCreateGroupBtn.addEventListener('click', () => this.closeModal(this.elements.createGroupModal));
+        this.elements.createGroupModal.addEventListener('click', (e) => this.handleModalBackdropClick(e, this.elements.createGroupModal));
+
+        this.elements.expenseForm.addEventListener('submit', (e) => this.handleExpenseSubmit(e));
+        this.elements.budgetForm.addEventListener('submit', (e) => this.handleBudgetSubmit(e));
+        this.elements.editBudgetForm.addEventListener('submit', (e) => this.handleEditBudgetSubmit(e));
+        this.elements.createGroupForm.addEventListener('submit', (e) => this.handleCreateGroupSubmit(e));
+        this.elements.customCategoryForm.addEventListener('submit', (e) => this.handleCustomCategorySubmit(e));
+        this.elements.incomeForm.addEventListener('submit', (e) => this.handleIncomeSubmit(e));
+
+        this.elements.budgetsList.addEventListener('click', (e) => this.handleBudgetListClick(e));
+        this.elements.groupSelector.addEventListener('change', (e) => this.handleGroupSelection(e));
+        this.elements.recentTransactions.addEventListener('click', (e) => this.handleTransactionListClick(e));
+        this.elements.deleteGroupBtn.addEventListener('click', () => this.handleDeleteGroup());
+        this.elements.incomesList.addEventListener('click', (e) => this.handleIncomeListClick(e));
+
+        this.elements.exportCsvBtn.addEventListener('click', () => this.exportToCsv());
+
+        document.addEventListener('click', () => this.closeDropdownIfOpen());
+    }
+
+    initializeAuth() {
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                this.elements.userNameEl.textContent = user.displayName;
+                
+                document.querySelectorAll('.logged-in').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.logged-out').forEach(el => el.style.display = 'none');
+                
+                await this.loadUserData();
+                this.renderAll();
+            } else {
+                this.elements.userNameEl.textContent = 'Guest';
+
+                document.querySelectorAll('.logged-in').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.logged-out').forEach(el => el.style.display = 'block');
+                
+                this.clearUserData();
+                this.renderAll();
+            }
+        });
+    }
+
+    async loadUserData() {
+        try {
+            this.state.expenses = await this.fetchData('expenses');
+            this.state.groups = await this.fetchData('groups');
+            this.state.incomes = await this.fetchData('incomes');
+
+            const budgetsFromServer = await this.fetchData('budgets');
+            const budgetObject = {};
+            budgetsFromServer.forEach(b => {
+                budgetObject[b.category] = b.amount;
+            });
+            this.state.budgets = budgetObject;
+        } catch (error) {
+            console.error("Error loading user data:", error);
+        }
+    }
+
+    clearUserData() {
+        this.state.expenses = [];
+        this.state.budgets = {};
+        this.state.groups = [];
+        this.state.incomes = [];
+    }
+
+    async fetchData(endpoint) {
+        const user = auth.currentUser;
+        if (!user) return [];
+        
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error(`Failed to fetch ${endpoint}:`, error);
+            this.showToast(`Error loading data: ${error.message}`, 'error');
+            return [];
+        }
+    }
+
+    async createData(endpoint, payload) {
+        const user = auth.currentUser;
+        if (!user) return null;
+        
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error(`Failed to create data for ${endpoint}:`, error);
+            this.showToast(`Error saving data: ${error.message}`, 'error');
+            return null;
+        }
+    }
+
+    async deleteData(endpointWithId) {
+        const user = auth.currentUser;
+        if (!user) return false;
+        
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/${endpointWithId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            return true;
+        } catch (error) {
+            console.error(`Failed to delete ${endpointWithId}:`, error);
+            this.showToast(`Error deleting data: ${error.message}`, 'error');
+            return false;
+        }
+    }
+
+    async updateData(endpointWithId, payload) {
+        const user = auth.currentUser;
+        if (!user) return null;
+        
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch(`${API_BASE_URL}/${endpointWithId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error(`Failed to update ${endpointWithId}:`, error);
+            this.showToast(`Error updating data: ${error.message}`, 'error');
+            return null;
+        }
+    }
+
+    handleNavigation(e) {
+        e.preventDefault();
+        const hash = e.currentTarget.getAttribute('href');
+        if (hash && hash.startsWith('#')) {
+            this.navigateTo(hash);
+        }
+    }
+
+    async handleLogin(e) {
+        e.preventDefault();
+        this.elements.profileDropdown.classList.add('hidden');
+        await this.signInWithGoogle();
+    }
+
+    async handleLogout(e) {
+        e.preventDefault();
+        this.elements.profileDropdown.classList.add('hidden');
+        await this.signOut();
+    }
+
+    toggleProfileDropdown(e) {
+        e.stopPropagation();
+        this.elements.profileDropdown.classList.toggle('hidden');
+    }
+
+    switchTheme(e) {
+        e.preventDefault();
+        this.state.currentTheme = (this.state.currentTheme + 1) % this.state.themes.length;
+        document.body.className = this.state.themes[this.state.currentTheme] + 
+            (document.body.classList.contains('authenticated') ? ' authenticated' : '');
+        this.elements.profileDropdown.classList.add('hidden');
+    }
+
+    openExpenseModal() {
+        this.elements.expenseForm.reset();
+        document.getElementById('expense-id').value = '';
+        this.openModal(this.elements.expenseModal);
+    }
+
+    handleModalBackdropClick(e, modal) {
+        if (e.target === modal) {
+            this.closeModal(modal);
+        }
+    }
+
+    async handleExpenseSubmit(e) {
+        e.preventDefault();
+        
+        const expenseId = document.getElementById('expense-id').value;
+        const expenseData = {
+            description: document.getElementById('expense-description').value,
+            amount: parseFloat(document.getElementById('expense-amount').value),
+            category: document.getElementById('expense-category').value,
+            groupId: document.getElementById('expense-group-select').value || null,
+            paidBy: auth.currentUser.displayName
+        };
+
+        let success = false;
+        if (expenseId) {
+            const updatedExpense = await this.updateData(`expenses/${expenseId}`, expenseData);
+            if (updatedExpense) {
+                this.showToast('Expense updated successfully!');
+                success = true;
+            }
+        } else {
+            const newExpense = await this.createData('expenses', expenseData);
+            if (newExpense) {
+                this.showToast('Expense added successfully!');
+                success = true;
+            }
+        }
+
+        if (success) {
+            this.elements.expenseForm.reset();
+            this.closeModal(this.elements.expenseModal);
+            this.state.expenses = await this.fetchData('expenses');
+            this.renderAll();
+        }
+    }
+
+    async handleBudgetSubmit(e) {
+        e.preventDefault();
+
+        const budgetData = {
+            category: document.getElementById('budget-category').value,
+            amount: parseFloat(document.getElementById('budget-amount').value)
+        };
+
+        const newBudget = await this.createData('budgets', budgetData);
+
+        if (newBudget) {
+            this.showToast('Budget set successfully!');
+            this.elements.budgetForm.reset();
+        
+            const budgetsFromServer = await this.fetchData('budgets');
+            const budgetObject = {};
+            budgetsFromServer.forEach(b => {
+                budgetObject[b.category] = b.amount;
+            });
+            this.state.budgets = budgetObject;
+        
+            this.renderAll();
+        }
+    }
+
+    async handleEditBudgetSubmit(e) {
+        e.preventDefault();
+        const category = document.getElementById('edit-budget-category-hidden').value;
+        const newAmount = parseFloat(document.getElementById('edit-budget-amount').value);
+        
+        if (category && !isNaN(newAmount)) {
+            const budgetsFromServer = await this.fetchData('budgets');
+            const budgetToUpdate = budgetsFromServer.find(b => b.category === category);
+
+            if (budgetToUpdate) {
+                const success = await this.updateData(`budgets/${budgetToUpdate.id}`, {
+                    amount: newAmount
+                });
+
+                if (success) {
+                    this.state.budgets[category] = newAmount;
+                    this.closeModal(this.elements.editBudgetModal);
+                    this.showToast('Budget updated!');
+                    this.renderAll();
+                } else {
+                    this.showToast('Failed to update budget. Please try again.', 'error');
+                }
+            } else {
+                this.showToast('Budget not found on server.', 'error');
+            }
+        }
+    }
+    
+    async handleCreateGroupSubmit(e) {
+        e.preventDefault();
+
+        const name = document.getElementById('group-name').value;
+        const membersStr = document.getElementById('group-members').value;
+    
+        const memberEmails = membersStr.split(',').map(email => email.trim()).filter(email => email);
+
+        const groupData = {
+            name: name,
+            members: memberEmails
+        };
+
+        const newGroup = await this.createData('groups', groupData);
+
+        if (newGroup) {
+            this.showToast('Group created successfully!');
+            this.elements.createGroupForm.reset();
+            this.closeModal(this.elements.createGroupModal);
+        
+            this.state.groups = await this.fetchData('groups');
+            this.state.selectedGroupId = newGroup.id;
+        
+            this.renderAll();
+        }
+    }
+
+    handleCustomCategorySubmit(e) {
+        e.preventDefault();
+        const name = document.getElementById('custom-category-name').value;
+        const icon = document.getElementById('custom-category-icon').value;
+        
+        if (name && icon) {
+            this.state.categories.push({ name, icon });
+            this.elements.customCategoryForm.reset();
+            this.showToast('Custom category added!');
+            this.renderAll();
+        }
+    }
+
+    async handleIncomeSubmit(e) {
+        e.preventDefault();
+        const incomeData = {
+            source: document.getElementById('income-source').value,
+            amount: parseFloat(document.getElementById('income-amount').value),
+            recurrence: document.getElementById('income-recurrence').value
+        };
+
+        const newIncome = await this.createData('incomes', incomeData);
+        if (newIncome) {
+            this.showToast('Income source added!');
+            this.elements.incomeForm.reset();
+            this.state.incomes = await this.fetchData('incomes');
+            this.renderAll();
+        }
+    }
+
+    async handleBudgetListClick(e) {
+        const editButton = e.target.closest('.edit-budget-btn');
+        const deleteButton = e.target.closest('.delete-budget-btn');
+
+        if (editButton) {
+            const category = editButton.dataset.category;
+            document.getElementById('edit-budget-category-title').textContent = `For category: ${category}`;
+            document.getElementById('edit-budget-amount').value = this.state.budgets[category];
+            document.getElementById('edit-budget-category-hidden').value = category;
+            this.openModal(this.elements.editBudgetModal);
+        }
+
+        if (deleteButton) {
+            const category = deleteButton.dataset.category;
+            if (confirm(`Are you sure you want to delete the "${category}" budget?`)) {
+                const budgetsFromServer = await this.fetchData('budgets');
+                const budgetToDelete = budgetsFromServer.find(b => b.category === category);
+
+                if (budgetToDelete) {
+                    const success = await this.deleteData(`budgets/${budgetToDelete.id}`);
+
+                    if (success) {
+                        delete this.state.budgets[category];
+                        this.showToast('Budget deleted!', 'error');
+                        this.renderAll();
+                    } else {
+                        this.showToast('Failed to delete budget. Please try again.', 'error');
+                    }
+                } else {
+                    delete this.state.budgets[category];
+                    this.showToast('Budget deleted locally!', 'error');
+                    this.renderAll();
+                }
+            }
+        }
+    }
+
+    handleGroupSelection(e) {
+        this.state.selectedGroupId = e.target.value;
+        this.renderGroups();
+    }
+
+    async handleTransactionListClick(e) {
+        const editBtn = e.target.closest('.edit-expense-btn');
+        const deleteBtn = e.target.closest('.delete-expense-btn');
+
+        if (editBtn) {
+            const expenseId = editBtn.dataset.id;
+            const expenseToEdit = this.state.expenses.find(ex => ex.id === expenseId);
+
+            if (expenseToEdit) {
+                document.getElementById('expense-id').value = expenseToEdit.id;
+                document.getElementById('expense-description').value = expenseToEdit.description;
+                document.getElementById('expense-amount').value = expenseToEdit.amount;
+                document.getElementById('expense-category').value = expenseToEdit.category;
+                this.openModal(this.elements.expenseModal);
+            }
+        }
+
+        if (deleteBtn) {
+            const expenseId = deleteBtn.dataset.id;
+            if (confirm('Are you sure you want to delete this expense?')) {
+                const success = await this.deleteData(`expenses/${expenseId}`);
+                if (success) {
+                    this.showToast('Expense deleted!', 'error');
+                    this.state.expenses = await this.fetchData('expenses');
+                    this.renderAll();
+                }
+            }
+        }
+    }
+
+    async handleDeleteGroup() {
+        const groupId = this.state.selectedGroupId;
+        if (!groupId) {
+            alert("Please select a group to delete.");
+            return;
+        }
+
+        if (confirm("Are you sure you want to delete this group? This action cannot be undone.")) {
+            const success = await this.deleteData(`groups/${groupId}`);
+            if (success) {
+                this.showToast("Group deleted successfully.", "error");
+                this.state.selectedGroupId = null;
+                this.state.groups = await this.fetchData('groups');
+                this.renderAll();
+            }
+        }
+    }
+
+    async handleIncomeListClick(e) {
+        const deleteBtn = e.target.closest('.delete-income-btn');
+
+        if (deleteBtn) {
+            const incomeId = deleteBtn.dataset.id;
+            if (confirm('Are you sure you want to delete this income source?')) {
+                const success = await this.deleteData(`incomes/${incomeId}`);
+                if (success) {
+                    this.showToast('Income source deleted!', 'error');
+                    this.state.incomes = await this.fetchData('incomes');
+                    this.renderAll();
+                }
+            }
+        }
+    }
+
+    exportToCsv() {
+        const headers = ['ID', 'Description', 'Amount', 'Category', 'Date', 'GroupID'];
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + headers.join(",") + "\n" 
+            + this.state.expenses.map(e => [e.id, e.description, e.amount, e.category, e.date, e.groupId].join(",")).join("\n");
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "budgetpal_expenses.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        this.showToast('Data exported!');
+    }
+
+    closeDropdownIfOpen() {
+        if (!this.elements.profileDropdown.classList.contains('hidden')) {
+            this.elements.profileDropdown.classList.add('hidden');
+        }
+    }
+
+    navigateTo(hash) {
+        const viewId = hash.substring(1) + '-view';
+        const targetView = document.getElementById(viewId);
+        if (!targetView) return;
+
+        this.elements.views.forEach(view => view.classList.remove('active'));
+        targetView.classList.add('active');
+
+        this.elements.navItems.forEach(item => {
+            const href = item.getAttribute('href');
+            if (href && href.startsWith('#')) {
+                item.classList.toggle('active', href === hash);
+            }
+        });
+        
+        const title = hash.charAt(1).toUpperCase() + hash.slice(2);
+        this.elements.headerTitle.textContent = title;
+        this.state.currentView = hash.substring(1);
+
+        if (this.state.currentView === 'reports') {
+            this.renderIncomeReports();
+        }
+    }
+
+    openModal(modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.querySelector('.modal-content').classList.replace('scale-95', 'scale-100'), 10);
+    }
+
+    closeModal(modal) {
+        modal.querySelector('.modal-content').classList.replace('scale-100', 'scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+    }
+
+    showToast(message, type = 'success') {
+        this.elements.toastMessage.textContent = message;
+        this.elements.toast.className = `toast fixed bottom-5 right-5 text-white py-3 px-6 rounded-lg shadow-lg ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+        this.elements.toast.classList.add('show');
+        setTimeout(() => {
+            this.elements.toast.classList.remove('show');
+        }, 3000);
+    }
+
+    async signInWithGoogle() {
+        try {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            await auth.signInWithPopup(provider);
+            this.showToast('Successfully signed in!');
+        } catch (error) {
+            console.error('Sign in error:', error);
+            this.showToast('Sign in failed. Please try again.', 'error');
+        }
+    }
+
+    async signOut() {
+        try {
+            await auth.signOut();
+            this.showToast('Successfully signed out!');
+        } catch (error) {
+            console.error('Sign out error:', error);
+            this.showToast('Sign out failed. Please try again.', 'error');
+        }
+    }
+
+    renderAll() {
+        this.renderDashboard();
+        this.renderBudgets();
+        this.renderGroups();
+        this.renderIncomeReports();
+        this.populateDropdowns();
+        this.renderQuote();
+        this.renderIncomes();
+    }
+
+    populateDropdowns() {
+        const expenseGroupSelect = document.getElementById('expense-group-select');
+        expenseGroupSelect.innerHTML = '<option value="">Personal Expense</option>';
+        this.state.groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name;
+            expenseGroupSelect.appendChild(option);
+        });
+
+        this.elements.groupSelector.innerHTML = '';
+        this.state.groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name;
+            this.elements.groupSelector.appendChild(option);
+        });
+        this.elements.groupSelector.value = this.state.selectedGroupId;
+        
+        const budgetCategorySelect = document.getElementById('budget-category');
+        const expenseCategorySelect = document.getElementById('expense-category');
+        budgetCategorySelect.innerHTML = '';
+        expenseCategorySelect.innerHTML = '';
+        
+        this.state.categories.forEach(cat => {
+            [budgetCategorySelect, expenseCategorySelect].forEach(select => {
+                const option = document.createElement('option');
+                option.textContent = `${cat.icon} ${cat.name}`;
+                option.value = cat.name;
+                select.appendChild(option);
+            });
+        });
+        
+        const overallOption = document.createElement('option');
+        overallOption.textContent = '🎯 Overall';
+        overallOption.value = 'Overall';
+        budgetCategorySelect.prepend(overallOption);
+    }
+
+    renderDashboard() {
+        const personalExpenses = this.state.expenses.filter(ex => !ex.groupId);
+        const totalSpent = personalExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+        document.getElementById('total-spent').textContent = `₹${totalSpent.toFixed(2)}`;
+        
+        const overallBudget = this.state.budgets['Overall'] || 0;
+        document.getElementById('main-budget-status').textContent = `₹${totalSpent.toFixed(2)} / ₹${overallBudget.toFixed(2)}`;
+        
+        if (this.state.expenses.length === 0) {
+            this.elements.recentTransactions.innerHTML = '<p class="text-gray-500 text-center">No transactions yet. Add one to get started!</p>';
+        } else {
+            this.elements.recentTransactions.innerHTML = '';
+            this.state.expenses.filter(ex => !ex.groupId).slice(0, 10).forEach(ex => {
+                const el = document.createElement('div');
+                el.className = 'flex justify-between items-center';
+                el.innerHTML = `
+                    <div class="flex-1">
+                        <p class="font-medium">${ex.description}</p>
+                        <p class="text-sm text-gray-500">${ex.groupId ? this.state.groups.find(g=>g.id===ex.groupId)?.name : ex.category}</p>
+                    </div>
+                    <p class="font-bold text-red-500 mr-4">-₹${ex.amount.toFixed(2)}</p>
+                    <div class="flex gap-2">
+                        <button class="btn-icon edit-expense-btn" data-id="${ex.id}">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536l12.232-12.232z"></path>
+                            </svg>
+                        </button>
+                        <button class="btn-icon delete-expense-btn" data-id="${ex.id}">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                this.elements.recentTransactions.appendChild(el);
+            });
+        }
+        this.updateSpendingTrendChart();
+    }
+
+    renderBudgets() {
+        this.elements.budgetsList.innerHTML = '';
+        if (Object.keys(this.state.budgets).length === 0) {
+            this.elements.budgetsList.innerHTML = '<p class="text-gray-500 text-center col-span-full">You haven\'t set any budgets. Add one using the form above.</p>';
+        } else {
+            for (const category in this.state.budgets) {
+                const budgetAmount = this.state.budgets[category];
+                const spentAmount = this.state.expenses
+                    .filter(ex => {
+                        if (category === 'Overall') {
+                            return !ex.groupId;
+                        }
+                        return ex.category === category && !ex.groupId;
+                    })
+                    .reduce((sum, ex) => sum + ex.amount, 0);
+            
+                const percentage = budgetAmount > 0 ? Math.min((spentAmount / budgetAmount) * 100, 100) : 0;
+                const color = percentage > 90 ? 'bg-red-500' : percentage > 70 ? 'bg-yellow-500' : 'bg-indigo-500';
+
+                const el = document.createElement('div');
+                el.className = 'bg-white p-4 rounded-lg shadow card-interactive';
+                el.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="font-semibold">${category}</h4>
+                            <span class="text-sm font-medium text-gray-600">₹${spentAmount.toFixed(2)} / ₹${budgetAmount.toFixed(2)}</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="btn-icon edit-budget-btn" data-category="${category}" title="Edit Budget">
+                                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536l12.232-12.232z"></path>
+                                </svg>
+                            </button>
+                            <button class="btn-icon delete-budget-btn" data-category="${category}" title="Delete Budget">
+                                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-4">
+                        <div class="${color} h-4 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                    ${percentage >= 100 ? `<p class="text-red-600 text-sm mt-2 font-semibold">Budget exceeded!</p>` : ''}
+                `;
+                this.elements.budgetsList.appendChild(el);
+            }
+        }
+    }
+
+    renderGroups() {
+        const groupContentArea = document.getElementById('group-content-area');
+        const selectedGroup = this.state.groups.find(g => g.id === this.state.selectedGroupId);
+
+        if (this.state.selectedGroupId) {
+            this.elements.deleteGroupBtn.classList.remove('hidden');
+        } else {
+            this.elements.deleteGroupBtn.classList.add('hidden');
+        }
+
+        if (!selectedGroup) {
+            groupContentArea.innerHTML = `
+                <div class="text-center py-12">
+                    <h3 class="text-xl font-semibold text-gray-700">No group selected</h3>
+                    <p class="text-gray-500 mt-2">Create a new group or select one from the dropdown to get started.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const groupExpenses = this.state.expenses.filter(ex => ex.groupId === selectedGroup.id);
+        const totalGroupSpent = groupExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+        const members = selectedGroup.members;
+        const sharePerPerson = members.length > 0 ? totalGroupSpent / members.length : 0;
+
+        const paidByMember = {};
+        const uidToNameMap = {};
+        members.forEach(member => {
+            paidByMember[member.uid] = 0;
+            uidToNameMap[member.uid] = member.displayName;
+        });
+
+        groupExpenses.forEach(ex => {
+            if (paidByMember.hasOwnProperty(ex.userId)) {
+                paidByMember[ex.userId] += ex.amount;
+            }
+        });
+
+        const balances = {};
+        members.forEach(member => {
+            balances[member.uid] = paidByMember[member.uid] - sharePerPerson;
+        });
+
+        const settlements = [];
+        const debtors = members.filter(m => balances[m.uid] < 0);
+        const creditors = members.filter(m => balances[m.uid] > 0);
+    
+        debtors.forEach(debtor => {
+            let amountOwed = -balances[debtor.uid];
+            creditors.forEach(creditor => {
+                if (amountOwed <= 0.01) return;
+                let amountCanReceive = balances[creditor.uid];
+                if (amountCanReceive > 0.01) {
+                    const payment = Math.min(amountOwed, amountCanReceive);
+                    settlements.push({ from: debtor.uid, to: creditor.uid, amount: payment });
+                    balances[debtor.uid] += payment;
+                    balances[creditor.uid] -= payment;
+                    amountOwed -= payment;
+                }
+            });
+        });
+    
+        let balancesHtml = '';
+        if (settlements.length > 0) {
+            settlements.forEach(s => {
+                const fromName = uidToNameMap[s.from] || 'Unknown';
+                const toName = uidToNameMap[s.to] || 'Unknown';
+                balancesHtml += `
+                    <div class="bg-gray-100 p-3 rounded-md flex justify-between items-center">
+                        <span><span class="font-bold">${fromName}</span> owes <span class="font-bold">${toName}</span></span> 
+                        <span class="font-bold text-green-600">₹${s.amount.toFixed(2)}</span>
+                    </div>
+                `;
+            });
+        }
+        if (balancesHtml === '') balancesHtml = `<p class="text-gray-500">Everyone is settled up!</p>`;
+
+        let transactionsHtml = '';
+        if (groupExpenses.length > 0) {
+            groupExpenses.forEach(ex => {
+                transactionsHtml += `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="font-medium">${ex.description}</p>
+                            <p class="text-sm text-gray-500">Paid by ${ex.paidBy}</p>
+                        </div>
+                        <p class="font-bold">-₹${ex.amount.toFixed(2)}</p>
+                    </div>
+                `;
+            });
+        } else {
+            transactionsHtml = `<p class="text-gray-500">No transactions for this group yet.</p>`;
+        }
+
+        groupContentArea.innerHTML = `
+            <h2 class="text-2xl font-bold mb-6 text-center" id="group-view-title">Group: ${selectedGroup.name}</h2>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Balances (Who Owes Whom)</h3>
+                    <div class="space-y-3">${balancesHtml}</div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Group Transactions</h3>
+                    <div class="space-y-4 overflow-y-auto max-h-64">${transactionsHtml}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    renderIncomes() {
+        if (this.state.incomes.length === 0) {
+            this.elements.incomesList.innerHTML = '<p class="text-gray-500">No income sources added yet.</p>';
+            return;
+        }
+
+        this.elements.incomesList.innerHTML = '';
+        this.state.incomes.forEach(income => {
+            const el = document.createElement('div');
+            el.className = 'flex justify-between items-center bg-gray-50 p-3 rounded-md';
+            el.innerHTML = `
+                <div class="flex items-center">
+                    <button class="delete-income-btn mr-4 text-gray-400 hover:text-red-500" data-id="${income.id}" title="Delete Income">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                    <div>
+                        <p class="font-medium">${income.source}</p>
+                        <p class="text-sm text-gray-500 capitalize">${income.recurrence}</p>
+                    </div>
+                </div>
+                <p class="font-bold text-green-600">+₹${income.amount.toFixed(2)}</p>
+            `;
+            this.elements.incomesList.appendChild(el);
+        });
+    }
+
+    renderQuote() {
+        const randomIndex = Math.floor(Math.random() * this.state.quotes.length);
+        this.elements.quoteEl.textContent = this.state.quotes[randomIndex];
+    }
+
+    renderIncomeReports() {
+        if (!document.getElementById('total-monthly-income')) return;
+
+        const incomeAnalysis = this.incomeReportsLogic.getIncomeAnalysis(this.state.incomes);
+        const expenseAnalysis = this.incomeReportsLogic.getExpenseAnalysis(this.state.expenses);
+        const healthRecommendations = this.incomeReportsLogic.generateFinancialHealth(incomeAnalysis, expenseAnalysis);
+
+        document.getElementById('total-monthly-income').textContent = `₹${incomeAnalysis.totalMonthlyIncome.toFixed(2)}`;
+        document.getElementById('income-source-count').textContent = `${incomeAnalysis.totalSources} sources`;
+        document.getElementById('recurring-monthly-income').textContent = `₹${incomeAnalysis.recurringMonthlyIncome.toFixed(2)}`;
+        document.getElementById('recurring-percentage').textContent = `${incomeAnalysis.recurringPercentage.toFixed(1)}% of total`;
+        document.getElementById('onetime-monthly-income').textContent = `₹${incomeAnalysis.oneTimeMonthlyIncome.toFixed(2)}`;
+        
+        const oneTimeCount = incomeAnalysis.frequencyBreakdown['one-time']?.count || 0;
+        document.getElementById('onetime-count').textContent = `${oneTimeCount} sources`;
+        
+        document.getElementById('total-expenses-month').textContent = `₹${expenseAnalysis.totalMonthlyExpenses.toFixed(2)}`;
+        const expensePercentage = incomeAnalysis.totalMonthlyIncome > 0 ? 
+            (expenseAnalysis.totalMonthlyExpenses / incomeAnalysis.totalMonthlyIncome) * 100 : 0;
+        document.getElementById('expense-vs-income').textContent = `${expensePercentage.toFixed(1)}% of income`;
+
+        this.renderIncomeBreakdown(incomeAnalysis);
+        this.renderExpenseCategoryBreakdown(expenseAnalysis);
+        
+        document.getElementById('six-month-income').textContent = `₹${incomeAnalysis.sixMonthProjection.toFixed(2)}`;
+        document.getElementById('annual-income').textContent = `₹${incomeAnalysis.annualProjection.toFixed(2)}`;
+        
+        if (expenseAnalysis.highestCategory) {
+            document.getElementById('highest-expense-category').textContent = 
+                `Top Category: ${expenseAnalysis.highestCategory.name} (₹${expenseAnalysis.highestCategory.amount.toFixed(2)})`;
+        }
+        
+        const savingsPotential = incomeAnalysis.totalMonthlyIncome - expenseAnalysis.totalMonthlyExpenses;
+        document.getElementById('savings-potential').textContent = 
+            `Potential Savings: ₹${Math.max(0, savingsPotential).toFixed(2)}`;
+
+        this.renderFinancialHealth(healthRecommendations);
+        this.updateIncomeExpenseChart(incomeAnalysis, expenseAnalysis);
+    }
+
+    renderIncomeBreakdown(analysis) {
+        const container = document.getElementById('income-breakdown');
+        if (!container) return;
+
+        container.innerHTML = '';
+        
+        for (const [recurrence, data] of Object.entries(analysis.frequencyBreakdown)) {
+            const percentage = analysis.totalMonthlyIncome > 0 ? 
+                (data.monthlyEquivalent / analysis.totalMonthlyIncome) * 100 : 0;
+            
+            const div = document.createElement('div');
+            div.className = 'flex justify-between items-center p-3 bg-white rounded border';
+            div.innerHTML = `
+                <div>
+                    <p class="font-medium capitalize">${recurrence}</p>
+                    <p class="text-sm text-gray-600">${data.count} source${data.count !== 1 ? 's' : ''} • ${percentage.toFixed(1)}%</p>
+                </div>
+                <p class="font-bold text-green-600">₹${data.monthlyEquivalent.toFixed(2)}</p>
+            `;
+            container.appendChild(div);
+        }
+
+        if (Object.keys(analysis.frequencyBreakdown).length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">No income sources found</p>';
+        }
+    }
+
+    renderExpenseCategoryBreakdown(analysis) {
+        const container = document.getElementById('expense-category-breakdown');
+        if (!container) return;
+
+        container.innerHTML = '';
+        
+        const sortedCategories = Object.entries(analysis.categoryBreakdown)
+            .sort(([,a], [,b]) => b.total - a.total)
+            .slice(0, 5);
+
+        sortedCategories.forEach(([category, data]) => {
+            const div = document.createElement('div');
+            div.className = 'flex justify-between items-center p-3 bg-white rounded border';
+            div.innerHTML = `
+                <div>
+                    <p class="font-medium">${category}</p>
+                    <p class="text-sm text-gray-600">${data.count} transaction${data.count !== 1 ? 's' : ''}</p>
+                </div>
+                <p class="font-bold text-red-600">₹${data.total.toFixed(2)}</p>
+            `;
+            container.appendChild(div);
+        });
+
+        if (sortedCategories.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">No expenses this month</p>';
+        }
+    }
+
+    renderFinancialHealth(recommendations) {
+        const container = document.getElementById('financial-health');
+        if (!container) return;
+
+        container.innerHTML = '';
+        
+        recommendations.forEach(rec => {
+            const div = document.createElement('div');
+            div.className = `mb-3 p-3 rounded ${
+                rec.type === 'critical' ? 'bg-red-100 text-red-800 border border-red-200' :
+                rec.type === 'warning' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
+                rec.type === 'excellent' ? 'bg-green-100 text-green-800 border border-green-200' :
+                rec.type === 'good' ? 'bg-green-100 text-green-800 border border-green-200' :
+                rec.type === 'positive' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                'bg-gray-100 text-gray-800 border border-gray-200'
+            }`;
+            div.textContent = rec.message;
+            container.appendChild(div);
+        });
+
+        if (recommendations.length === 0) {
+            container.innerHTML = '<p class="text-gray-600">Add some income sources to get personalized financial insights!</p>';
+        }
+    }
+
+    updateIncomeExpenseChart(incomeAnalysis, expenseAnalysis) {
+        if (!this.incomeExpenseChart) {
+            this.incomeExpenseChart = this.incomeReportsLogic.createIncomeExpenseChart();
+        }
+        
+        if (!this.incomeExpenseChart) return;
+
+        const labels = [];
+        const incomeData = [];
+        const expenseData = [];
+        
+        for (let i = 0; i < 12; i++) {
+            const date = new Date();
+            date.setMonth(date.getMonth() + i);
+            labels.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
+            
+            incomeData.push(incomeAnalysis.recurringMonthlyIncome);
+            expenseData.push(expenseAnalysis.totalMonthlyExpenses);
+        }
+
+        this.incomeExpenseChart.data.labels = labels;
+        this.incomeExpenseChart.data.datasets[0].data = incomeData;
+        this.incomeExpenseChart.data.datasets[1].data = expenseData;
+        this.incomeExpenseChart.update();
+    }
+
+    initCharts() {
+        const trendCtx = document.getElementById('spending-trend-chart').getContext('2d');
+        this.spendingTrendChart = new Chart(trendCtx, {
+            type: 'bar',
+            data: { 
+                labels: [], 
+                datasets: [{ 
+                    label: 'Total Spent', 
+                    data: [], 
+                    backgroundColor: 'rgba(79, 70, 229, 0.7)' 
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false 
+            }
+        });
+    }
+
+    updateSpendingTrendChart() {
+        if (!this.spendingTrendChart) return;
+
+        const monthlySpending = {};
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date();
+            d.setMonth(d.getMonth() - i);
+            const monthKey = `${d.getFullYear()}-${monthNames[d.getMonth()]}`;
+            monthlySpending[monthKey] = 0;
+        }
+
+        this.state.expenses.filter(ex => !ex.groupId).forEach(ex => {
+            const d = new Date(ex.date);
+            const monthKey = `${d.getFullYear()}-${monthNames[d.getMonth()]}`;
+            if (monthlySpending.hasOwnProperty(monthKey)) {
+                monthlySpending[monthKey] += ex.amount;
+            }
+        });
+
+        this.spendingTrendChart.data.labels = Object.keys(monthlySpending);
+        this.spendingTrendChart.data.datasets[0].data = Object.values(monthlySpending);
+        this.spendingTrendChart.update();
+    }
+
+    setGreeting() {
+        const date = new Date();
+        const hours = date.getHours();
+        let greeting = hours < 12 ? 'Good Morning!' : hours < 18 ? 'Good Afternoon!' : 'Good Evening!';
+        const dateString = date.toLocaleDateString('en-IN', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        this.elements.headerGreeting.textContent = `${greeting} Today is ${dateString}.`;
+    }
+
+    init() {
+        this.setGreeting();
+        this.initCharts();
+        this.navigateTo('#dashboard');
+        this.renderAll();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    new BudgetPalApp();
+});
+</script>
+</body>
+</html>
