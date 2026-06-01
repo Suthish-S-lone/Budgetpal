@@ -5,38 +5,68 @@ from firebase_admin import credentials, firestore, auth
 from flask import Flask, jsonify, request, g
 from dotenv import load_dotenv
 from datetime import datetime
-from flask_cors import CORS 
+from flask_cors import CORS
+import logging
 
-# Load environment variables from .env file
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file (for local development only)
 load_dotenv()
 
-# Initialize Flask App
 app = Flask(__name__)
+
+# CORS Configuration - IMPORTANT: Update this after deployment
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '').split(',')
+if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == ['']:
+    # Default for local development
+    ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+    ]
+
 CORS(app, resources={
     r"/*": {
-        "origins": [
-            "http://localhost:5000",
-            "http://127.0.0.1:5000",
-            "https://suthish-s-lone.github.io"  # Replace with your actual GitHub Pages URL
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "origins": ALLOWED_ORIGINS,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
 
 # --- Firestore Initialization ---
 try:
-    if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
+    # Check if running on Google Cloud (Cloud Run has this environment variable)
+    if os.getenv('K_SERVICE'):
+        # Running on Cloud Run - use Application Default Credentials
+        logger.info("Initializing Firebase with Application Default Credentials (Cloud Run)")
+        firebase_admin.initialize_app()
+    elif os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
+        # Use JSON credentials from environment variable
         import json
         service_account_info = json.loads(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))
         cred = credentials.Certificate(service_account_info)
         firebase_admin.initialize_app(cred)
-    else:
-        cred = credentials.ApplicationDefault()
+        logger.info("Initialized Firebase with JSON credentials")
+    elif os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+        # Use credentials file path
+        cred = credentials.Certificate(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
         firebase_admin.initialize_app(cred)
-    print("✅ Successfully connected to Firestore")
+        logger.info("Initialized Firebase with credentials file")
+    else:
+        # Fallback to Application Default Credentials
+        firebase_admin.initialize_app()
+        logger.info("Initialized Firebase with Application Default Credentials")
+    
+    logger.info("✅ Successfully connected to Firestore")
 except Exception as e:
-    print(f"🔥 Failed to connect to Firestore: {e}")
+    logger.error(f"🔥 Failed to connect to Firestore: {e}")
+    raise
 
 db = firestore.client()
 
@@ -57,6 +87,7 @@ def token_required(f):
         except auth.InvalidIdTokenError:
             return jsonify({'message': 'Token is invalid'}), 401
         except Exception as e:
+            logger.error(f"Token verification error: {e}")
             return jsonify({'message': 'An unknown error occurred', 'error': str(e)}), 500
         
         return f(*args, **kwargs)
@@ -92,7 +123,16 @@ def verify_group_ownership(group_id, user_id):
 # --- Routes ---
 @app.route("/")
 def index():
-    return jsonify({"status": "ok", "message": "BudgetPal API is running!"})
+    return jsonify({
+        "status": "ok", 
+        "message": "BudgetPal API is running!",
+        "version": "1.0.0"
+    })
+
+@app.route("/health")
+def health():
+    """Health check endpoint for Cloud Run"""
+    return jsonify({"status": "healthy"}), 200
 
 # --- Expense Routes ---
 @app.route("/expenses", methods=['POST'])
@@ -115,6 +155,7 @@ def add_expense():
         update_time, doc_ref = db.collection('expenses').add(expense_data)
         return jsonify({'id': doc_ref.id, **expense_data}), 201
     except Exception as e:
+        logger.error(f"Error adding expense: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route("/expenses", methods=['GET'])
@@ -140,15 +181,38 @@ def update_expense(expense_id):
         if status_code != 200:
             return doc, status_code
 
-        data = request.get_json()
-        doc_ref.update(data)
+        data = request.get_json() or {}
+        
+        # Define strictly allowed fields for updating
+        allowed_keys = {'description', 'amount', 'category', 'groupId', 'paidBy'}
+        update_data = {}
+        
+        for key in allowed_keys:
+            if key in data:
+                if key == 'amount':
+                    try:
+                        val = float(data['amount'])
+                        if val <= 0:
+                            return jsonify({'message': 'Amount must be a positive non-zero number'}), 400
+                        update_data['amount'] = val
+                    except (ValueError, TypeError):
+                        return jsonify({'message': 'Amount must be a valid number'}), 400
+                else:
+                    update_data[key] = data[key]
+
+        if not update_data:
+            return jsonify({'message': 'No valid fields provided for update'}), 400
+
+        doc_ref.update(update_data)
         
         updated_expense = doc_ref.get().to_dict()
         updated_expense['id'] = doc_ref.id
         
         return jsonify(updated_expense), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        logger.error(f"Error updating expense: {e}")
+        return jsonify({'error': 'An error occurred during updating the expense'}), 500
+
 
 @app.route("/expenses/<expense_id>", methods=['DELETE'])
 @token_required
@@ -161,6 +225,7 @@ def delete_expense(expense_id):
         doc_ref.delete()
         return jsonify({'message': 'Expense deleted successfully'}), 200
     except Exception as e:
+        logger.error(f"Error deleting expense: {e}")
         return jsonify({'error': str(e)}), 500
 
 # --- Budget Routes ---
@@ -181,6 +246,7 @@ def add_budget():
         update_time, doc_ref = db.collection('budgets').add(budget_data)
         return jsonify({'id': doc_ref.id, **budget_data}), 201
     except Exception as e:
+        logger.error(f"Error adding budget: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route("/budgets", methods=['GET'])
@@ -214,6 +280,7 @@ def update_budget(budget_id):
         
         return jsonify(updated_budget), 200
     except Exception as e:
+        logger.error(f"Error updating budget: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route("/budgets/<budget_id>", methods=['DELETE'])
@@ -227,6 +294,7 @@ def delete_budget(budget_id):
         doc_ref.delete()
         return jsonify({'message': 'Budget deleted successfully'}), 200
     except Exception as e:
+        logger.error(f"Error deleting budget: {e}")
         return jsonify({'error': str(e)}), 500
 
 # --- Group Routes ---
@@ -245,7 +313,7 @@ def create_group():
                 user = auth.get_user_by_email(email)
                 member_ids.add(user.uid)
             except auth.UserNotFoundError:
-                print(f"Warning: User with email {email} not found.")
+                logger.warning(f"User with email {email} not found.")
                 continue
         
         group_data = {
@@ -258,6 +326,7 @@ def create_group():
         update_time, doc_ref = db.collection('groups').add(group_data)
         return jsonify({'id': doc_ref.id, **group_data}), 201
     except Exception as e:
+        logger.error(f"Error creating group: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route("/groups", methods=['GET'])
@@ -302,6 +371,7 @@ def delete_group(group_id):
         doc_ref.delete()
         return jsonify({'message': 'Group deleted successfully'}), 200
     except Exception as e:
+        logger.error(f"Error deleting group: {e}")
         return jsonify({'error': str(e)}), 500
 
 # --- Income Routes ---
@@ -323,6 +393,7 @@ def add_income():
         update_time, doc_ref = db.collection('incomes').add(income_data)
         return jsonify({'id': doc_ref.id, **income_data}), 201
     except Exception as e:
+        logger.error(f"Error adding income: {e}")
         return jsonify({'error': str(e)}), 400
 
 @app.route("/incomes", methods=['GET'])
@@ -351,8 +422,11 @@ def delete_income(income_id):
         doc_ref.delete()
         return jsonify({'message': 'Income source deleted successfully'}), 200
     except Exception as e:
+        logger.error(f"Error deleting income: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    # Only use debug mode in local development
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    app.run(debug=debug, host='0.0.0.0', port=port)

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BudgetPal - Your Smart Expense Planner</title>
+    <script src="config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
@@ -489,17 +490,17 @@
     </div>
     
 <script>
-const firebaseConfig = {
-    apiKey: "AIzaSyDwEfpM5cLiv95U6GICX0aJj2MjV8mWqfs",
-    authDomain: "budgetpal-470505.firebaseapp.com",
-    projectId: "budgetpal-470505",
-    storageBucket: "budgetpal-470505.firebasestorage.app",
-    messagingSenderId: "513174377104",
-    appId: "1:513174377104:web:7844bfb5646bfb470fbe15",
-    measurementId: "G-ZE9GR76DBB"
-};
+if (typeof CONFIG === 'undefined') {
+    alert('⚠️ Configuration Error: config.js not found!\n\n' +
+          'Please follow these steps:\n' +
+          '1. Copy config.example.js to config.js\n' +
+          '2. Add your Firebase credentials\n' +
+          '3. Refresh the page');
+    throw new Error('CONFIG is not defined. Please create config.js from config.example.js');
+}
 
-const API_BASE_URL = 'http://127.0.0.1:5000';
+const firebaseConfig = CONFIG.firebase;
+const API_BASE_URL = CONFIG.api.baseUrl;
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();

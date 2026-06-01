@@ -1,0 +1,45 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+venv/
+env/
+ENV/
+
+# Environment files (these will be set as Cloud Run environment variables)
+.env
+.env.local
+.env.production
+
+# Service account key (use Cloud Run's built-in service account instead)
+serviceAccountKey.json
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Git
+.git
+.gitignore
+README.md
