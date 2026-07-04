@@ -505,6 +505,20 @@ const API_BASE_URL = CONFIG.api.baseUrl;
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
+function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function(match) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[match];
+    });
+}
+
+
 class IncomeReportsLogic {
     calculateMonthlyEquivalent(amount, recurrence) {
         switch(recurrence?.toLowerCase()) {
@@ -761,6 +775,7 @@ class BudgetPalApp {
             user: { name: 'Guest', email: null, uid: null },
             currentView: 'dashboard',
             selectedGroupId: null,
+            groupExpenses: [],
             currentTheme: 0,
             themes: ['', 'theme-sunset', 'theme-ocean', 'theme-forest'],
             quotes: [
@@ -1084,6 +1099,7 @@ class BudgetPalApp {
             this.elements.expenseForm.reset();
             this.closeModal(this.elements.expenseModal);
             this.state.expenses = await this.fetchData('expenses');
+            await this.refreshGroupExpenses();
             this.renderAll();
         }
     }
@@ -1235,8 +1251,17 @@ class BudgetPalApp {
         }
     }
 
-    handleGroupSelection(e) {
+    async refreshGroupExpenses() {
+        if (this.state.selectedGroupId) {
+            this.state.groupExpenses = await this.fetchData(`groups/${this.state.selectedGroupId}/expenses`);
+        } else {
+            this.state.groupExpenses = [];
+        }
+    }
+
+    async handleGroupSelection(e) {
         this.state.selectedGroupId = e.target.value;
+        await this.refreshGroupExpenses();
         this.renderGroups();
     }
 
@@ -1264,6 +1289,7 @@ class BudgetPalApp {
                 if (success) {
                     this.showToast('Expense deleted!', 'error');
                     this.state.expenses = await this.fetchData('expenses');
+                    await this.refreshGroupExpenses();
                     this.renderAll();
                 }
             }
@@ -1456,8 +1482,8 @@ class BudgetPalApp {
                 el.className = 'flex justify-between items-center';
                 el.innerHTML = `
                     <div class="flex-1">
-                        <p class="font-medium">${ex.description}</p>
-                        <p class="text-sm text-gray-500">${ex.groupId ? this.state.groups.find(g=>g.id===ex.groupId)?.name : ex.category}</p>
+                        <p class="font-medium">${escapeHTML(ex.description)}</p>
+                        <p class="text-sm text-gray-500">${ex.groupId ? escapeHTML(this.state.groups.find(g=>g.id===ex.groupId)?.name) : escapeHTML(ex.category)}</p>
                     </div>
                     <p class="font-bold text-red-500 mr-4">-₹${ex.amount.toFixed(2)}</p>
                     <div class="flex gap-2">
@@ -1503,16 +1529,16 @@ class BudgetPalApp {
                 el.innerHTML = `
                     <div class="flex justify-between items-start mb-2">
                         <div>
-                            <h4 class="font-semibold">${category}</h4>
+                            <h4 class="font-semibold">${escapeHTML(category)}</h4>
                             <span class="text-sm font-medium text-gray-600">₹${spentAmount.toFixed(2)} / ₹${budgetAmount.toFixed(2)}</span>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <button class="btn-icon edit-budget-btn" data-category="${category}" title="Edit Budget">
+                            <button class="btn-icon edit-budget-btn" data-category="${escapeHTML(category)}" title="Edit Budget">
                                 <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536l12.232-12.232z"></path>
                                 </svg>
                             </button>
-                            <button class="btn-icon delete-budget-btn" data-category="${category}" title="Delete Budget">
+                            <button class="btn-icon delete-budget-btn" data-category="${escapeHTML(category)}" title="Delete Budget">
                                 <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
@@ -1549,44 +1575,47 @@ class BudgetPalApp {
             return;
         }
 
-        const groupExpenses = this.state.expenses.filter(ex => ex.groupId === selectedGroup.id);
-        const totalGroupSpent = groupExpenses.reduce((sum, ex) => sum + ex.amount, 0);
+        const groupExpenses = this.state.groupExpenses || [];
+        const totalGroupSpentCents = groupExpenses.reduce((sum, ex) => sum + Math.round(ex.amount * 100), 0);
         const members = selectedGroup.members;
-        const sharePerPerson = members.length > 0 ? totalGroupSpent / members.length : 0;
+        const membersCount = members.length;
+        const sharePerPersonCents = membersCount > 0 ? Math.floor(totalGroupSpentCents / membersCount) : 0;
+        const residualCents = totalGroupSpentCents - (sharePerPersonCents * membersCount);
 
-        const paidByMember = {};
+        const paidByMemberCents = {};
         const uidToNameMap = {};
         members.forEach(member => {
-            paidByMember[member.uid] = 0;
+            paidByMemberCents[member.uid] = 0;
             uidToNameMap[member.uid] = member.displayName;
         });
 
         groupExpenses.forEach(ex => {
-            if (paidByMember.hasOwnProperty(ex.userId)) {
-                paidByMember[ex.userId] += ex.amount;
+            if (paidByMemberCents.hasOwnProperty(ex.userId)) {
+                paidByMemberCents[ex.userId] += Math.round(ex.amount * 100);
             }
         });
 
-        const balances = {};
-        members.forEach(member => {
-            balances[member.uid] = paidByMember[member.uid] - sharePerPerson;
+        const balancesCents = {};
+        members.forEach((member, index) => {
+            const individualShareCents = sharePerPersonCents + (index < residualCents ? 1 : 0);
+            balancesCents[member.uid] = paidByMemberCents[member.uid] - individualShareCents;
         });
 
         const settlements = [];
-        const debtors = members.filter(m => balances[m.uid] < 0);
-        const creditors = members.filter(m => balances[m.uid] > 0);
+        const debtors = members.filter(m => balancesCents[m.uid] < 0);
+        const creditors = members.filter(m => balancesCents[m.uid] > 0);
     
         debtors.forEach(debtor => {
-            let amountOwed = -balances[debtor.uid];
+            let amountOwedCents = -balancesCents[debtor.uid];
             creditors.forEach(creditor => {
-                if (amountOwed <= 0.01) return;
-                let amountCanReceive = balances[creditor.uid];
-                if (amountCanReceive > 0.01) {
-                    const payment = Math.min(amountOwed, amountCanReceive);
-                    settlements.push({ from: debtor.uid, to: creditor.uid, amount: payment });
-                    balances[debtor.uid] += payment;
-                    balances[creditor.uid] -= payment;
-                    amountOwed -= payment;
+                if (amountOwedCents <= 0) return;
+                let amountCanReceiveCents = balancesCents[creditor.uid];
+                if (amountCanReceiveCents > 0) {
+                    const paymentCents = Math.min(amountOwedCents, amountCanReceiveCents);
+                    settlements.push({ from: debtor.uid, to: creditor.uid, amount: paymentCents / 100 });
+                    balancesCents[debtor.uid] += paymentCents;
+                    balancesCents[creditor.uid] -= paymentCents;
+                    amountOwedCents -= paymentCents;
                 }
             });
         });
@@ -1598,7 +1627,7 @@ class BudgetPalApp {
                 const toName = uidToNameMap[s.to] || 'Unknown';
                 balancesHtml += `
                     <div class="bg-gray-100 p-3 rounded-md flex justify-between items-center">
-                        <span><span class="font-bold">${fromName}</span> owes <span class="font-bold">${toName}</span></span> 
+                        <span><span class="font-bold">${escapeHTML(fromName)}</span> owes <span class="font-bold">${escapeHTML(toName)}</span></span> 
                         <span class="font-bold text-green-600">₹${s.amount.toFixed(2)}</span>
                     </div>
                 `;
@@ -1612,8 +1641,8 @@ class BudgetPalApp {
                 transactionsHtml += `
                     <div class="flex justify-between items-center">
                         <div>
-                            <p class="font-medium">${ex.description}</p>
-                            <p class="text-sm text-gray-500">Paid by ${ex.paidBy}</p>
+                            <p class="font-medium">${escapeHTML(ex.description)}</p>
+                            <p class="text-sm text-gray-500">Paid by ${escapeHTML(ex.paidBy)}</p>
                         </div>
                         <p class="font-bold">-₹${ex.amount.toFixed(2)}</p>
                     </div>
@@ -1624,7 +1653,7 @@ class BudgetPalApp {
         }
 
         groupContentArea.innerHTML = `
-            <h2 class="text-2xl font-bold mb-6 text-center" id="group-view-title">Group: ${selectedGroup.name}</h2>
+            <h2 class="text-2xl font-bold mb-6 text-center" id="group-view-title">Group: ${escapeHTML(selectedGroup.name)}</h2>
             <div class="grid md:grid-cols-2 gap-8">
                 <div>
                     <h3 class="text-lg font-semibold mb-4">Balances (Who Owes Whom)</h3>
@@ -1656,8 +1685,8 @@ class BudgetPalApp {
                         </svg>
                     </button>
                     <div>
-                        <p class="font-medium">${income.source}</p>
-                        <p class="text-sm text-gray-500 capitalize">${income.recurrence}</p>
+                        <p class="font-medium">${escapeHTML(income.source)}</p>
+                        <p class="text-sm text-gray-500 capitalize">${escapeHTML(income.recurrence)}</p>
                     </div>
                 </div>
                 <p class="font-bold text-green-600">+₹${income.amount.toFixed(2)}</p>
@@ -1725,7 +1754,7 @@ class BudgetPalApp {
             div.className = 'flex justify-between items-center p-3 bg-white rounded border';
             div.innerHTML = `
                 <div>
-                    <p class="font-medium capitalize">${recurrence}</p>
+                    <p class="font-medium capitalize">${escapeHTML(recurrence)}</p>
                     <p class="text-sm text-gray-600">${data.count} source${data.count !== 1 ? 's' : ''} • ${percentage.toFixed(1)}%</p>
                 </div>
                 <p class="font-bold text-green-600">₹${data.monthlyEquivalent.toFixed(2)}</p>
@@ -1753,7 +1782,7 @@ class BudgetPalApp {
             div.className = 'flex justify-between items-center p-3 bg-white rounded border';
             div.innerHTML = `
                 <div>
-                    <p class="font-medium">${category}</p>
+                    <p class="font-medium">${escapeHTML(category)}</p>
                     <p class="text-sm text-gray-600">${data.count} transaction${data.count !== 1 ? 's' : ''}</p>
                 </div>
                 <p class="font-bold text-red-600">₹${data.total.toFixed(2)}</p>

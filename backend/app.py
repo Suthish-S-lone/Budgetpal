@@ -55,9 +55,15 @@ try:
         logger.info("Initialized Firebase with JSON credentials")
     elif os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
         # Use credentials file path
-        cred = credentials.Certificate(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
-        firebase_admin.initialize_app(cred)
-        logger.info("Initialized Firebase with credentials file")
+        cred_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        if os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            logger.info("Initialized Firebase with credentials file")
+        else:
+            logger.warning(f"⚠️ GOOGLE_APPLICATION_CREDENTIALS path '{cred_path}' does not exist! Falling back to Application Default Credentials.")
+            firebase_admin.initialize_app()
+            logger.info("Initialized Firebase with Application Default Credentials")
     else:
         # Fallback to Application Default Credentials
         firebase_admin.initialize_app()
@@ -87,8 +93,8 @@ def token_required(f):
         except auth.InvalidIdTokenError:
             return jsonify({'message': 'Token is invalid'}), 401
         except Exception as e:
-            logger.error(f"Token verification error: {e}")
-            return jsonify({'message': 'An unknown error occurred', 'error': str(e)}), 500
+            logger.exception("Token verification error")
+            return jsonify({'message': 'An internal error occurred during authentication'}), 500
         
         return f(*args, **kwargs)
     return decorated_function
@@ -155,8 +161,8 @@ def add_expense():
         update_time, doc_ref = db.collection('expenses').add(expense_data)
         return jsonify({'id': doc_ref.id, **expense_data}), 201
     except Exception as e:
-        logger.error(f"Error adding expense: {e}")
-        return jsonify({'error': str(e)}), 400
+        logger.exception("Error adding expense")
+        return jsonify({'error': 'An error occurred while adding the expense'}), 400
 
 @app.route("/expenses", methods=['GET'])
 @token_required
@@ -225,8 +231,8 @@ def delete_expense(expense_id):
         doc_ref.delete()
         return jsonify({'message': 'Expense deleted successfully'}), 200
     except Exception as e:
-        logger.error(f"Error deleting expense: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error deleting expense")
+        return jsonify({'error': 'An error occurred while deleting the expense'}), 500
 
 # --- Budget Routes ---
 @app.route("/budgets", methods=['POST'])
@@ -246,8 +252,8 @@ def add_budget():
         update_time, doc_ref = db.collection('budgets').add(budget_data)
         return jsonify({'id': doc_ref.id, **budget_data}), 201
     except Exception as e:
-        logger.error(f"Error adding budget: {e}")
-        return jsonify({'error': str(e)}), 400
+        logger.exception("Error adding budget")
+        return jsonify({'error': 'An error occurred while adding the budget'}), 400
 
 @app.route("/budgets", methods=['GET'])
 @token_required
@@ -280,8 +286,8 @@ def update_budget(budget_id):
         
         return jsonify(updated_budget), 200
     except Exception as e:
-        logger.error(f"Error updating budget: {e}")
-        return jsonify({'error': str(e)}), 400
+        logger.exception("Error updating budget")
+        return jsonify({'error': 'An error occurred while updating the budget'}), 400
 
 @app.route("/budgets/<budget_id>", methods=['DELETE'])
 @token_required
@@ -294,8 +300,8 @@ def delete_budget(budget_id):
         doc_ref.delete()
         return jsonify({'message': 'Budget deleted successfully'}), 200
     except Exception as e:
-        logger.error(f"Error deleting budget: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error deleting budget")
+        return jsonify({'error': 'An error occurred while deleting the budget'}), 500
 
 # --- Group Routes ---
 @app.route("/groups", methods=['POST'])
@@ -326,8 +332,8 @@ def create_group():
         update_time, doc_ref = db.collection('groups').add(group_data)
         return jsonify({'id': doc_ref.id, **group_data}), 201
     except Exception as e:
-        logger.error(f"Error creating group: {e}")
-        return jsonify({'error': str(e)}), 400
+        logger.exception("Error creating group")
+        return jsonify({'error': 'An error occurred while creating the group'}), 400
 
 @app.route("/groups", methods=['GET'])
 @token_required
@@ -337,28 +343,75 @@ def get_groups():
     results = groups_ref.stream()
     
     groups_list = []
+    all_member_uids = set()
+    raw_groups = []
+    
     for doc in results:
         group_data = doc.to_dict()
         group_data['id'] = doc.id
-        
-        # Fetch member details
+        raw_groups.append(group_data)
+        if 'members' in group_data:
+            for m_uid in group_data['members']:
+                all_member_uids.add(m_uid)
+                
+    # Batch query all users in one API call
+    user_records_map = {}
+    if all_member_uids:
+        uids_list = list(all_member_uids)
+        for i in range(0, len(uids_list), 100):
+            batch = uids_list[i:i+100]
+            identifiers = [auth.UidIdentifier(uid) for uid in batch]
+            get_users_result = auth.get_users(identifiers)
+            for user in get_users_result.users:
+                user_records_map[user.uid] = {
+                    'uid': user.uid,
+                    'displayName': user.display_name or 'Unknown User',
+                    'email': user.email or ''
+                }
+                
+    for group_data in raw_groups:
         member_details = []
         if 'members' in group_data:
             for member_uid in group_data['members']:
-                try:
-                    user_record = auth.get_user(member_uid)
-                    member_details.append({
-                        'uid': user_record.uid,
-                        'displayName': user_record.display_name,
-                        'email': user_record.email
-                    })
-                except auth.UserNotFoundError:
-                    member_details.append({'uid': member_uid, 'displayName': 'Unknown User'})
-        
+                if member_uid in user_records_map:
+                    member_details.append(user_records_map[member_uid])
+                else:
+                    member_details.append({'uid': member_uid, 'displayName': 'Unknown User', 'email': ''})
         group_data['members'] = member_details
         groups_list.append(group_data)
         
     return jsonify(groups_list), 200
+
+@app.route("/groups/<group_id>/expenses", methods=['GET'])
+@token_required
+def get_group_expenses(group_id):
+    try:
+        user_id = g.user['uid']
+        
+        # Verify the user is actually a member of the group
+        group_ref = db.collection('groups').document(group_id)
+        group_doc = group_ref.get()
+        if not group_doc.exists:
+            return jsonify({'message': 'Group not found'}), 404
+            
+        group_data = group_doc.to_dict()
+        if user_id not in group_data.get('members', []):
+            return jsonify({'message': 'Forbidden: You are not a member of this group'}), 403
+            
+        # Query expenses belonging to this group
+        expenses_ref = db.collection('expenses').where('groupId', '==', group_id).order_by('date', direction=firestore.Query.DESCENDING)
+        results = expenses_ref.stream()
+        
+        expenses_list = []
+        for doc in results:
+            expense_data = doc.to_dict()
+            expense_data['id'] = doc.id
+            expenses_list.append(expense_data)
+            
+        return jsonify(expenses_list), 200
+    except Exception as e:
+        logger.exception("Error fetching group expenses")
+        return jsonify({'error': 'An error occurred while fetching group expenses'}), 500
 
 @app.route("/groups/<group_id>", methods=['DELETE'])
 @token_required
@@ -371,8 +424,8 @@ def delete_group(group_id):
         doc_ref.delete()
         return jsonify({'message': 'Group deleted successfully'}), 200
     except Exception as e:
-        logger.error(f"Error deleting group: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error deleting group")
+        return jsonify({'error': 'An error occurred while deleting the group'}), 500
 
 # --- Income Routes ---
 @app.route("/incomes", methods=['POST'])
@@ -393,8 +446,8 @@ def add_income():
         update_time, doc_ref = db.collection('incomes').add(income_data)
         return jsonify({'id': doc_ref.id, **income_data}), 201
     except Exception as e:
-        logger.error(f"Error adding income: {e}")
-        return jsonify({'error': str(e)}), 400
+        logger.exception("Error adding income")
+        return jsonify({'error': 'An error occurred while adding the income'}), 400
 
 @app.route("/incomes", methods=['GET'])
 @token_required
@@ -422,8 +475,8 @@ def delete_income(income_id):
         doc_ref.delete()
         return jsonify({'message': 'Income source deleted successfully'}), 200
     except Exception as e:
-        logger.error(f"Error deleting income: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error deleting income")
+        return jsonify({'error': 'An error occurred while deleting the income'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
